@@ -118,14 +118,27 @@ class DoorDetector:
         end_index = dpth.shape[1] // 2 + self.z
         zone = dpth[:, start_index:end_index] 
         #show the zone
-        cv2.imshow("zone", zone)
-        print("zx cropped: ",zone[0].shape, "\033[F")
-        print("zy cropped: ",zone[1].shape, "\033[F")
+        
+        print("zx cropped: ",zone[0].shape)
+        print("zy cropped: ",zone[1].shape)
 
-        distance = get_distance(dpth, zone.shape[0] // 2, zone.shape[1] // 2, kernel_size = zone.shape[0])
-
+        distance = get_distance(dpth, zone.shape[0] // 2, zone.shape[1] // 2, kernel_size = zone.shape[1])
+        
         #if any pixels in the zone are less than treshold, then there is an obstacle
         obstacle = distance < self.t
+
+        
+        # Draw the zone on the image
+        cv2.rectangle(zone, (zone.shape[1] // 2 - self.z, 0), (zone.shape[1] // 2 + self.z, zone.shape[0]), (0, 255, 0), 2)
+        # Draw the distance to the obstacle
+        cv2.putText(zone, f"Distance: {distance}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        if obstacle:
+            cv2.putText(zone, "Obstacle detected!", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+        else:
+            cv2.putText(zone, "No obstacles detected", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+
+
+        cv2.imshow("zone", zone)
         
         return zone, obstacle, distance
     
@@ -144,7 +157,7 @@ def get_distance(depth, x, y, kernel_size=8):
     filtered_region = cv2.boxFilter(region, -1, (8, 8))
 
     #draw the region
-    cv2.rectangle(depth, (x - offset, y - offset), (x + offset, y + offset), (255, 0, 0), 1)
+    #Ne narise prav cv2.rectangle(depth, (x - offset, y - offset), (x + offset, y + offset), (255, 0, 0), 1)
 
     #get the distance
     distance = filtered_region[offset,offset]

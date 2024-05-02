@@ -159,7 +159,7 @@ def main():
     threshold = 0.5
 
     # Set door detectors, 
-    door_straight_ahead = gl.DoorDetector(100,12)
+    door_straight_ahead = gl.DoorDetector(100,5)
 
     ''' CLASS ZoneChecker(12, 100) testing'
     zone1_checker = gl.ZoneChecker(12, 100)
@@ -297,6 +297,7 @@ def main():
 
 
             """DOOR DETECTION------------------------------------------------------------------"""
+            #TODO: detekcija dela sam na dvigalu, na dviznih vratah pa ne
             #if user preses c key, check for obstacles
             if cv2.waitKey(1) & 0xFF == ord('c'):
                 # Check for obstacles in the zone
