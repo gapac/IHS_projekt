@@ -31,6 +31,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Your script description")
     # Add arguments here
     parser.add_argument("filename", help="The name of the file to process")
+    parser.add_argument('--detect-humans', action='store_true', help='Enable human detection')
     # parser.add_argument(...)
     return parser.parse_args()
 
@@ -138,7 +139,7 @@ def main():
         print("depth list is empty")
         depth = images
         #QuickFix
-        
+    
 
     
     #Global variables
@@ -148,15 +149,14 @@ def main():
     # Check if a compatible GPU is available, otherwise use CPU
     device = torch.device("cuda")
     # Load a model
-    model_path = 'model/best.pt'
-    model = YOLO(model_path)  # load a custom model
+    model_path_ovir = 'model/best.pt'
+    model_path_hum = 'model/best_human_detect.pt'
+    model_ovir = YOLO(model_path_ovir)  # load a custom model
+    model_hum = YOLO(model_path_hum)  # load a custom model
     # Move the model to the GPU
-    model.to(device)
+    model_hum.to(device)
+    model_ovir.to(device)
     threshold = 0.5
-
-    # Load the pre-trained HOG model "humandetector"
-    hog = cv2.HOGDescriptor()
-    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
     # Set door detectors, 
     door_straight_ahead = gl.DoorDetector(100,12)
@@ -212,8 +212,6 @@ def main():
             cv2.putText(img, str(img[img_mouseY, img_mouseX]), (img_mouseX, img_mouseY), cv2.FONT_HERSHEY_SIMPLEX, 0.2, (255, 255, 255), 1)
             cv2.putText(dpth, str(dpth[dpt_mouseY, dpt_mouseX]), (dpt_mouseX, dpt_mouseY), cv2.FONT_HERSHEY_SIMPLEX, 0.2, (255, 255, 255), 1)
             #print("MouseX: ", mouseX, "MouseY: ", mouseY, "Value: ", img[mouseY, mouseX], "\033[F")
-
-
             """Testiranje funkcije za transformacijo FOV testing
             original_width, original_height = dpth.shape[1], dpth.shape[0]
             crop_width, crop_height = img.shape[1], img.shape[0]
@@ -228,27 +226,40 @@ def main():
             dpth_origin = convert_fov(dpth_origin, img_origin)"""
             
 
+
+
+
             """DETECTION BOX ------------------------------------------------------------------
             - detekcija samo v območju kamor se bo premaknil robot. Območje se lahko prilagodi glede na  planirano trajektorijo. """
             # define the region of interest 480x640
             img_cut = img#[0:480, 100:540]
 
 
-            """OBJECT DETECTION------------------------------------------------------------------"""
+            """OBJECT / HUMAN DETECTION------------------------------------------------------------------"""
             frame = img_cut
             frame = gl.fromat_for_model(frame)
             # Move the tensor to the GPU
             frame = frame.to(device)
+            if args.detect_humans:
+                results_hum = model_hum(frame)[0]
+                results_hum = results_hum.cpu()
+            else:
+                results_hum = None  # Or some other default value
+                
+            results_ovir = model_ovir(frame)[0]
+            results_ovir = results_ovir.cpu()
 
-            #run the model
-            results = model(frame)[0]
+            results_boxes = results_ovir.boxes.data.tolist()
+            results_names = results_ovir.names
 
-            #Move the tensor to the CPU
-            results = results.cpu()
+            if args.detect_humans:
+                results_boxes = torch.cat((results_ovir.boxes.data, results_hum.boxes.data), dim=0).tolist()
+                results_names = {**results_ovir.names, **results_hum.names}
+
             frame = frame.cpu()
             frame = gl.format_for_cv(frame)
 
-            for result in results.boxes.data.tolist():
+            for result in results_boxes:
                 x1, y1, x2, y2, score, class_id = result
                 if score > threshold:
                     """OBJECT DISTANCE -----------------------------------------------------------------"""
@@ -257,12 +268,16 @@ def main():
                     y = (y1 + y2) / 2
                     #put text distance to the object nex to the name
                     distance = gl.get_distance(dpth, x, y)
+                    cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 4)
+                    cv2.putText(frame, str(distance), (int(x1), int(y1 - 30)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+                    cv2.putText(frame, results_names[int(class_id)].upper(), (int(x1), int(y1 - 10)),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+                    #ToDo: ce enablas human detection ti vse ovire preimenuje v HUMAN??? vupsie
                     """WARNING pogoji-----------------------------------------------------------------"""
                     if distance < 12:
                         cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 4)
                         cv2.putText(frame, str(distance), (int(x1), int(y1 - 30)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
-                        cv2.putText(frame, results.names[int(class_id)].upper(), (int(x1), int(y1 - 10)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+                        cv2.putText(frame, results_names[int(class_id)].upper(), (int(x1), int(y1 - 10)),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+                    #ToDo: ce enablas human detection ti vse ovire preimenuje v HUMAN??? vupsie
                     elif distance < 4:
                         cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 4)
 
@@ -273,7 +288,7 @@ def main():
             #segmented image
 
             
-            """HUMAN DETECTION------------------------------------------------------------------"""
+            # """HUMAN DETECTION------------------------------------------------------------------"""
             # # Detect people in the image
             # boxes, weights = hog.detectMultiScale(frame, winStride=(4, 4), padding=(8, 8), scale=1.05)
             # # Draw bounding boxes around detected people
@@ -295,8 +310,8 @@ def main():
                     cv2.putText(frame, "Obstacle detected!", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2, cv2.LINE_AA)
                 else:
                     cv2.putText(frame, "No obstacles detected", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
- 
-                        
+
+
 
 
 

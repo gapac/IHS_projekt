@@ -1,4 +1,8 @@
-# projekt pri predmetu RV - robotski vid za mobilno platformo IHS
+# Projekt pri predmetu RV - robotski vid za mobilno platformo IHS
+
+## How to run
+python   "file"    "path_to_data"     "options"
+python .\main.py .\data_rv_ljudje\ --detect-humans
 
 ## Packages and pip commands
 - pip install -r requirements.txt
