@@ -22,27 +22,34 @@ from ultralytics import YOLO
 import torch
 
 
+
+"""SET PATHS -----------------------------------------------------------------------------------------"""
+VIDEOS_DIR = 'video'
+RESULTS_DIR = 'results'
+video_path_rgb = os.path.join(VIDEOS_DIR, 'data_rv_testni_podatki_1_rgb.avi')
+video_path_dpt = os.path.join(VIDEOS_DIR, 'data_rv_testni_podatki_1_dpt.avi')
+"""---------------------------------------------------------------------------------------------------	"""
+detect_humans = True
+
+
 img_mouseX, img_mouseY, dpt_mouseX, dpt_mouseY = 0, 0, 0, 0
 
-def parse_args():
-    """
-    Parses command-line arguments.
-    """
-    parser = argparse.ArgumentParser(description="Your script description")
-    # Add arguments here
-    parser.add_argument("filename", help="The name of the file to process")
-    parser.add_argument('--detect-humans', action='store_true', help='Enable human detection')
-    # parser.add_argument(...)
-    return parser.parse_args()
 
 def get_frames(filename):
-    """
-    Function to load all the images in folder 
-    """
-    images = [cv2.imread(file) for file in glob.glob(filename + "/png/*.png")]
-    depth = [cv2.imread(file) for file in glob.glob(filename + "/depth/*.png")]
+    video = cv2.VideoCapture(filename)
+    frames = []
 
-    return images, depth
+    while video.isOpened():
+        ret, frame = video.read()
+        # if frame is read correctly ret is True
+        if not ret:
+            break
+        frames.append(frame)
+
+    video.release()
+    cv2.destroyAllWindows()
+
+    return frames
 
 def display_frames(img_origin, dpth_origin, img, dpth):
     # Convert grayscale images to 3-channel images
@@ -121,16 +128,17 @@ def convert_fov(image, image_goal):
 
 
 
+
 def main():
     """
     Main function where the logic of the script is written.
     """
-    args = parse_args()
-    print(f"Filename: {args.filename}")
+    #print(f"Filename: {args.filename}")
     fps_delay = 1#int(1000 / 25)
     # Get the images
-    images, depth = get_frames(args.filename)
-    #invert depth
+    images= get_frames(video_path_rgb)
+    depth = get_frames(video_path_dpt)
+
     
     if len(depth) > 0:
         print("png:", images[0].shape, "depth: ",depth[0].shape)
@@ -141,13 +149,13 @@ def main():
         #QuickFix
     
 
-    
     #Global variables
     mouse_positions = []
     img_no = 90
     
     # Check if a compatible GPU is available, otherwise use CPU
-    device = torch.device("cuda")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {device}')
     # Load a model
     model_path_ovir = 'model/best.pt'
     model_path_hum = 'model/best_human_detect.pt'
@@ -161,21 +169,12 @@ def main():
     # Set door detectors, 
     door_straight_ahead = gl.DoorDetector(100,5)
 
-    ''' CLASS ZoneChecker(12, 100) testing'
-    zone1_checker = gl.ZoneChecker(12, 100)
-    zone2_checker = gl.ZoneChecker(12, 200)
-    zone3_checker = gl.ZoneChecker(12, 400)
 
-
-    IN WHILE LOOP:
-    img, obstacle, distance = zone1_checker.check(dpth)
-    print("Obsticele? - ", obstacle, "at distance: ", distance)
-    '''
-    
     ''' CLASS Align_images_with_mouse_clicks(3) testing'''
+
     align = gl.Align_images_with_mouse_clicks(8)
-    #cv2.imshow('depth1', depth[img_no])
-    #cv2.imshow('color1', images[img_no])
+
+
     #get oMat2D_t fro file if it exists
     if os.path.exists("aligned/oMat2D_t.npy"):
         oMat2D_t = np.load("aligned/oMat2D_t.npy")
@@ -188,14 +187,14 @@ def main():
     #save and aline images
     for i, img in enumerate(depth):
         depth[i] = align.warp_affine(images[i], depth[i], oMat2D_t)
-        cv2.imwrite(f'aligned/depth{i}.png', depth[i])
+        #cv2.imwrite(f'aligned/depth{i}.png', depth[i])
 
     # Set the mouse callback function for the window
     cv2.namedWindow('Image')
     cv2.setMouseCallback('Image', cursor_coordinates_image)
     cv2.namedWindow('Depth')
     cv2.setMouseCallback('Depth', cursor_coordinates_depth)
-    
+    image_number = 0
 
     while True:
         for img_origin, dpth_origin in zip(images, depth):
@@ -224,8 +223,6 @@ def main():
             dpth = dpth[top:bottom, left:right]
             dpth = convert_fov(dpth, img)
             dpth_origin = convert_fov(dpth_origin, img_origin)"""
-            
-
 
 
 
@@ -235,12 +232,13 @@ def main():
             img_cut = img#[0:480, 100:540]
 
 
+
             """OBJECT / HUMAN DETECTION------------------------------------------------------------------"""
             frame = img_cut
             frame = gl.fromat_for_model(frame)
             # Move the tensor to the GPU
             frame = frame.to(device)
-            if args.detect_humans:
+            if detect_humans:
                 results_hum = model_hum(frame)[0]
                 results_hum = results_hum.cpu()
             else:
@@ -248,19 +246,23 @@ def main():
                 
             results_ovir = model_ovir(frame)[0]
             results_ovir = results_ovir.cpu()
-
             results_boxes = results_ovir.boxes.data.tolist()
             results_names = results_ovir.names
 
-            if args.detect_humans:
+            if detect_humans:
                 results_boxes = torch.cat((results_ovir.boxes.data, results_hum.boxes.data), dim=0).tolist()
-                results_names = {**results_ovir.names, **results_hum.names}
+                results_names = list(results_ovir.names.values()) + list(results_hum.names.values())
+            else:
+                results_boxes = results_ovir.boxes.data.tolist()
+                results_names = list(results_ovir.names.values())
 
             frame = frame.cpu()
             frame = gl.format_for_cv(frame)
+            i=0
 
             for result in results_boxes:
                 x1, y1, x2, y2, score, class_id = result
+                name = results_names[i].upper()
                 if score > threshold:
                     """OBJECT DISTANCE -----------------------------------------------------------------"""
                     #calculate center of rectangle from x1, y1, x2, y2
@@ -268,18 +270,21 @@ def main():
                     y = (y1 + y2) / 2
                     #put text distance to the object nex to the name
                     distance = gl.get_distance(dpth, x, y)
+                    #round to 2 decimal places
+                    distance = round(distance, 2)
                     cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 4)
                     cv2.putText(frame, str(distance), (int(x1), int(y1 - 30)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
-                    cv2.putText(frame, results_names[int(class_id)].upper(), (int(x1), int(y1 - 10)),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
-                    #ToDo: ce enablas human detection ti vse ovire preimenuje v HUMAN??? vupsie
+                    cv2.putText(frame, name, (int(x1), int(y1 - 10)),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
                     """WARNING pogoji-----------------------------------------------------------------"""
                     if distance < 12:
                         cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 4)
                         cv2.putText(frame, str(distance), (int(x1), int(y1 - 30)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
-                        cv2.putText(frame, results_names[int(class_id)].upper(), (int(x1), int(y1 - 10)),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
-                    #ToDo: ce enablas human detection ti vse ovire preimenuje v HUMAN??? vupsie
+                        cv2.putText(frame, name, (int(x1), int(y1 - 10)),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
                     elif distance < 4:
                         cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 4)
+            i += 1  
+
+
 
             """NOTAROAD DETECTION------------------------------------------------------------------"""
             #TODO: rad bi dobo tk segmentirano sliko ko je v PDF Izziv RV 2023-2024.pdf str13 desna slika
@@ -287,13 +292,6 @@ def main():
             """dodaj kodo"""
             #segmented image
 
-            
-            # """HUMAN DETECTION------------------------------------------------------------------"""
-            # # Detect people in the image
-            # boxes, weights = hog.detectMultiScale(frame, winStride=(4, 4), padding=(8, 8), scale=1.05)
-            # # Draw bounding boxes around detected people
-            # for (x, y, w, h) in boxes:
-            #     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
 
             """DOOR DETECTION------------------------------------------------------------------"""
@@ -314,12 +312,14 @@ def main():
 
 
 
-
-
             """DISPLAYING IMAGES ------------------------------------------------------------------"""
             # Display the images
             cv2.imshow('Image', frame)
             cv2.imshow('Depth', dpth)
+            #save image to folder path RESULTS_DIR
+            cv2.imwrite(f'{RESULTS_DIR}/img{image_number}.png', frame)
+            image_number += 1
+
             #dispay image size
             print(img.shape)
             #display_frames(img_origin, dpth_origin, img, dpth)
@@ -327,8 +327,9 @@ def main():
             show_loop_frequency(time.time())
             if key == ord('q'):  # Exit loop if 'q' key is pressed
                 break
-        else:
-            continue
+            else:
+                continue
+
         break
 
     cv2.destroyAllWindows()
