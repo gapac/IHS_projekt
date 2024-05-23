@@ -32,8 +32,9 @@ video_path_dpt = os.path.join(VIDEOS_DIR, 'data_rv_testni_podatki_1_dpt.avi')
 detect_humans = True
 
 
-img_mouseX, img_mouseY, dpt_mouseX, dpt_mouseY = 0, 0, 0, 0
 
+"""FUNCTIONS-----------------------------------------------------------------------------------------"""
+img_mouseX, img_mouseY, dpt_mouseX, dpt_mouseY = 0, 0, 0, 0
 
 def get_frames(filename):
     video = cv2.VideoCapture(filename)
@@ -264,6 +265,7 @@ def main():
                 x1, y1, x2, y2, score, class_id = result
                 name = results_names[i].upper()
                 if score > threshold:
+                   
                     """OBJECT DISTANCE -----------------------------------------------------------------"""
                     #calculate center of rectangle from x1, y1, x2, y2
                     x = (x1 + x2) / 2
@@ -275,6 +277,7 @@ def main():
                     cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 4)
                     cv2.putText(frame, str(distance), (int(x1), int(y1 - 30)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
                     cv2.putText(frame, name, (int(x1), int(y1 - 10)),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+                    
                     """WARNING pogoji-----------------------------------------------------------------"""
                     if distance < 12:
                         cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 4)
@@ -283,14 +286,6 @@ def main():
                     elif distance < 4:
                         cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 4)
             i += 1  
-
-
-
-            """NOTAROAD DETECTION------------------------------------------------------------------"""
-            #TODO: rad bi dobo tk segmentirano sliko ko je v PDF Izziv RV 2023-2024.pdf str13 desna slika
-            #frame = img_cut
-            """dodaj kodo"""
-            #segmented image
 
 
 
