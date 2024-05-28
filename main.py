@@ -195,7 +195,7 @@ def main():
     cv2.setMouseCallback('Image', cursor_coordinates_image)
     cv2.namedWindow('Depth')
     cv2.setMouseCallback('Depth', cursor_coordinates_depth)
-    
+    i = 0
 
     while True:
         for img_origin, dpth_origin in zip(images, depth):
@@ -258,7 +258,7 @@ def main():
 
             frame = frame.cpu()
             frame = gl.format_for_cv(frame)
-            i = 0
+            
 
             for result in results_boxes:
                 x1, y1, x2, y2, score, class_id = result
