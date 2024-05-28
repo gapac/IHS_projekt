@@ -21,7 +21,7 @@ import os
 from ultralytics import YOLO
 import torch
 
-
+dir = 'output/'
 img_mouseX, img_mouseY, dpt_mouseX, dpt_mouseY = 0, 0, 0, 0
 
 def parse_args():
@@ -258,6 +258,7 @@ def main():
 
             frame = frame.cpu()
             frame = gl.format_for_cv(frame)
+            i = 0
 
             for result in results_boxes:
                 x1, y1, x2, y2, score, class_id = result
@@ -320,6 +321,11 @@ def main():
             # Display the images
             cv2.imshow('Image', frame)
             cv2.imshow('Depth', dpth)
+            #save the images to folder
+            if not os.path.exists(dir):
+                os.makedirs(dir)
+            cv2.imwrite(f'output/img{i}.png', frame)
+            i+=1
             #dispay image size
             print(img.shape)
             #display_frames(img_origin, dpth_origin, img, dpth)
